@@ -1,0 +1,75 @@
+# Field rules per invoice layout.
+#
+# A layout is chosen when ALL of its `detect` patterns match the PDF text
+# (regex, case-insensitive, multiline). Then each entry under `fields` is
+# resolved from the text with one of:
+#   regex: '<pattern with one capture group>'   first match wins
+#   line:  N                                    the N-th non-empty line (1-based)
+#   after: '<pattern>'  [offset: 1]             the line `offset` lines after a matching line
+#
+# To support a new layout, copy a block, change `detect`, and adjust the rules.
+
+defaults:
+  today_tolerance_days: 0      # invoices dated in the future are flagged
+  amount_tolerance: "0.01"     # allowed rounding difference in sum checks
+
+layouts:
+  classic:
+    description: "Plain US-style invoice (USD, ISO dates)"
+    detect: ['^INVOICE$', 'Bill To:']
+    decimal: "."
+    date_formats: ["%Y-%m-%d"]
+    fields:
+      invoice_number: {regex: '^Invoice No:\s*(\S+)'}
+      invoice_date:   {regex: '^Date:\s*(.+)$'}
+      due_date:       {regex: '^Due Date:\s*(.+)$'}
+      vendor:         {line: 1}
+      customer:       {after: 'Bill To:'}
+      currency:       {regex: '^Currency:\s*([A-Z]{3})'}
+      subtotal:       {regex: '^Subtotal:\s*(\S+)'}
+      tax:            {regex: '^Tax[^:]*:\s*(\S+)'}
+      total:          {regex: '^Total Due:\s*(\S+)'}
+    line_items:
+      start: '^Description\b'
+      end:   '^Subtotal'
+      row: '^(?P<description>.+?)\s+(?P<qty>\d+(?:[.,]\d+)?)\s+(?P<unit_price>\S+)\s+(?P<amount>\S+)$'
+
+  modern:
+    description: "Banded header, European number format (EUR, 'DD Month YYYY')"
+    detect: ['^Payment due:', '^Billed to$']
+    decimal: ","
+    date_formats: ["%d %B %Y"]
+    currency_symbols: {"€": "EUR"}
+    fields:
+      invoice_number: {regex: '^Invoice #\s*(\S+)'}
+      invoice_date:   {regex: '^Issued:\s*(.+)$'}
+      due_date:       {regex: '^Payment due:\s*(.+)$'}
+      vendor:         {line: 1}
+      customer:       {after: '^Billed to$'}
+      subtotal:       {regex: '^Net amount:\s*(\S+)'}
+      tax:            {regex: '^VAT[^:]*:\s*(\S+)'}
+      total:          {regex: '^Amount due:\s*(\S+)'}
+    line_items:
+      start: '^Item\b'
+      end:   '^Net amount'
+      row: '^(?P<description>.+?)\s+(?P<qty>\d+(?:[.,]\d+)?)\s+(?P<unit_price>\S+)\s+(?P<amount>\S+)$'
+
+  compact:
+    description: "UK-style tax invoice (GBP, DD/MM/YYYY, 'qty x unit' column)"
+    detect: ['^TAX INVOICE$']
+    decimal: "."
+    date_formats: ["%d/%m/%Y"]
+    currency_symbols: {"£": "GBP"}
+    fields:
+      invoice_number: {regex: '^Invoice Number:\s*(\S+)'}
+      invoice_date:   {regex: '^Invoice Date:\s*(.+)$'}
+      due_date:       {regex: '^Due By:\s*(.+)$'}
+      vendor:         {line: 2}
+      customer:       {regex: '^Customer:\s*(.+)$'}
+      subtotal:       {regex: '^Net total:\s*(\S+)'}
+      tax:            {regex: '^VAT[^:]*:\s*(\S+)'}
+      total:          {regex: '^Gross total:\s*(\S+)'}
+    line_items:
+      start: '^Description\b'
+      end:   '^Net total'
+      row: '^(?P<description>.+?)\s+(?P<qty>\d+(?:[.,]\d+)?)\s*x\s*(?P<unit_price>\S+)\s+(?P<amount>\S+)$'
