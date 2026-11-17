@@ -6,6 +6,7 @@ subtotal and total do not match its line items) so it must land in "Needs review
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
 
@@ -87,7 +88,6 @@ SAMPLES: list[Sample] = [
 ]
 
 
-# ------------------------------------------------------------------ formatting
 def _tax(s: Sample, subtotal: Decimal) -> Decimal:
     return (subtotal * s.tax_rate / 100).quantize(CENT, ROUND_HALF_UP)
 
@@ -110,7 +110,6 @@ def _pct(rate: Decimal) -> str:
 
 
 def _date(s: Sample, t: tuple[int, int, int]) -> str:
-    from datetime import date
     d = date(*t)
     if s.layout == "classic":
         return d.isoformat()
@@ -126,7 +125,6 @@ def _totals(s: Sample) -> tuple[Decimal, Decimal, Decimal]:
     return sub, tax, total
 
 
-# -------------------------------------------------------------------- layouts
 def _classic(c: canvas.Canvas, s: Sample) -> None:
     w, h = A4
     sub, tax, total = _totals(s)
@@ -169,7 +167,7 @@ def _classic(c: canvas.Canvas, s: Sample) -> None:
         c.drawRightString(540, y, _fmt(s, q * p))
     y -= 14
     c.line(330, y, 540, y)
-    for label, val, bold in ((f"Subtotal:", sub, False), (f"Tax ({_pct(s.tax_rate)}%):", tax, False),
+    for label, val, bold in (("Subtotal:", sub, False), (f"Tax ({_pct(s.tax_rate)}%):", tax, False),
                              ("Total Due:", total, True)):
         y -= 18
         c.setFont("Helvetica-Bold" if bold else "Helvetica", 11)

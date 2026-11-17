@@ -37,7 +37,6 @@ def read_pdf_text(path: str | Path) -> str:
         return "\n".join((p.extract_text() or "") for p in pdf.pages)
 
 
-# --------------------------------------------------------------- parsing helpers
 def parse_money(raw: str | None, decimal: str = ".") -> Decimal | None:
     if raw is None:
         return None
@@ -86,7 +85,6 @@ def _resolve(spec: dict, text: str, lines: list[str]) -> str | None:
     return None
 
 
-# ------------------------------------------------------------------ extraction
 def extract_text(text: str, source_file: str, cfg: Config) -> Invoice:
     """Run the layout rules over already-extracted PDF text."""
     inv = Invoice(source_file=source_file)

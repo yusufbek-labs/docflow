@@ -62,7 +62,7 @@ def test_fake_client_fills_missing_fields_as_medium_confidence(odd_pdf, cfg):
     assert inv.value("total") == D("119.0") and inv.value("invoice_date") == date(2025, 5, 3)
     assert inv.fields["total"].source == "ai" and inv.fields["total"].confidence == "medium"
     assert len(inv.line_items) == 1 and inv.line_items[0].source == "ai"
-    assert not inv.needs_review                       # medium + validation passes
+    assert not inv.needs_review                     
     assert "unknown_layout" in {i.code for i in inv.issues}
 
 

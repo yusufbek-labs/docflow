@@ -1,11 +1,9 @@
 """Builds docs/demo-run.png and docs/excel-preview.png from a REAL run.
 
-1. runs `docflow run` on samples/invoices and captures its actual stdout
-2. renders that text as a terminal-style image
-3. reads the real Invoices sheet from the generated workbook and draws it as a table
-
-Nothing is typed in by hand: re-run this script after changing the tool.
+Runs `docflow run` on samples/invoices, renders its real stdout as a terminal-style
+image and draws the generated Invoices sheet as a table. Nothing is typed in by hand.
 """
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -103,7 +101,7 @@ def main() -> None:
     out = ROOT / "out"
     cmd = [sys.executable, "-m", "docflow", "run", "--input", "samples/invoices", "--output", "out"]
     res = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, encoding="utf-8",
-                         env={**__import__("os").environ, "ANTHROPIC_API_KEY": ""})
+                         env={**os.environ, "ANTHROPIC_API_KEY": ""})
     if res.returncode != 0:
         sys.exit(res.stderr)
     (ROOT / "docs").mkdir(exist_ok=True)

@@ -18,7 +18,7 @@ def main() -> None:
     doc.styles["Normal"].font.size = Pt(10.5)
 
     banner = doc.add_paragraph()
-    r = banner.add_run("{%p if needs_review %}")
+    banner.add_run("{%p if needs_review %}")
     note = doc.add_paragraph()
     r = note.add_run("NEEDS REVIEW - do not file until checked")
     r.bold, r.font.color.rgb = True, RGBColor(0xC0, 0x39, 0x2B)

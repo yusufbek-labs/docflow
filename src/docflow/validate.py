@@ -15,14 +15,14 @@ def validate(inv: Invoice, cfg: Config | None = None, today: date | None = None)
     today = today or date.today()
     new: list[Issue] = []
 
-    # 1. required fields -------------------------------------------------------
+    # required fields
     for name in REQUIRED_FIELDS:
         if inv.value(name) in (None, ""):
             new.append(Issue("missing_field", f"Required field '{name}' was not found", "error", [name]))
     if not inv.line_items:
         new.append(Issue("no_line_items", "No line items were extracted", "error", ["line_items"]))
 
-    # 2. line arithmetic -------------------------------------------------------
+    # line arithmetic
     for n, li in enumerate(inv.line_items, 1):
         if None in (li.qty, li.unit_price, li.amount):
             new.append(Issue("line_unreadable", f"Line {n} has an unreadable number", "error", ["line_items"]))
@@ -34,7 +34,7 @@ def validate(inv: Invoice, cfg: Config | None = None, today: date | None = None)
 
     subtotal, tax, total = inv.value("subtotal"), inv.value("tax"), inv.value("total")
 
-    # 3. line items sum to subtotal -----------------------------------------------
+    # line items must add up to the subtotal
     amounts = [li.amount for li in inv.line_items if li.amount is not None]
     if amounts and subtotal is not None:
         s = sum(amounts, Decimal(0))
@@ -43,7 +43,7 @@ def validate(inv: Invoice, cfg: Config | None = None, today: date | None = None)
                              f"Line items add up to {s:,.2f} but the subtotal says {subtotal:,.2f}",
                              "error", ["line_items", "subtotal"]))
 
-    # 4. subtotal + tax = total -------------------------------------------------------
+    # subtotal + tax must equal the total (a missing tax counts as 0)
     if subtotal is not None and total is not None:
         t = tax if tax is not None else Decimal(0)
         if abs(subtotal + t - total) > tol:
@@ -52,7 +52,7 @@ def validate(inv: Invoice, cfg: Config | None = None, today: date | None = None)
                              f"but the total says {total:,.2f}",
                              "error", ["subtotal", "tax", "total"]))
 
-    # 5. date sanity ------------------------------------------------------------------
+    # date sanity
     idate, ddate = inv.value("invoice_date"), inv.value("due_date")
     if idate is not None:
         if idate > today:
@@ -63,12 +63,12 @@ def validate(inv: Invoice, cfg: Config | None = None, today: date | None = None)
         new.append(Issue("due_before_issue", f"Due date {ddate} is before invoice date {idate}",
                          "error", ["due_date", "invoice_date"]))
 
-    # 6. negative / zero money ------------------------------------------------------------
+    # a zero or negative total is never a valid invoice
     if total is not None and total <= 0:
         new.append(Issue("total_not_positive", f"Total {total} is not positive", "error", ["total"]))
 
     inv.issues.extend(new)
-    for issue in new:                       # downgrade confidence of implicated fields
+    for issue in new:                       # implicated fields drop to low confidence
         for name in issue.fields:
             fv = inv.fields.get(name)
             if fv is not None and fv.confidence != NA:

@@ -8,12 +8,13 @@ confidence="medium", source="ai" and still goes through validation.
 from __future__ import annotations
 
 import os
+from dataclasses import asdict, dataclass, is_dataclass
 from datetime import date
 from decimal import Decimal, InvalidOperation
 from typing import Any, Mapping, Protocol
 
 from .extract import missing_fields
-from .models import (DATE_FIELDS, MEDIUM, MONEY_FIELDS, FieldValue, Invoice, LineItem)
+from .models import DATE_FIELDS, MEDIUM, MONEY_FIELDS, FieldValue, Invoice, Issue, LineItem
 
 DEFAULT_MODEL = "claude-haiku-5-5"
 
@@ -32,8 +33,31 @@ class AIExtractor(Protocol):
     def extract(self, text: str, fields: list[str]) -> dict[str, Any]: ...
 
 
+@dataclass
+class AILine:
+    description: str
+    qty: float
+    unit_price: float
+    amount: float
+
+
+@dataclass
+class AIResult:
+    """Shape of the structured answer; the stdlib twin of the pydantic model below."""
+    invoice_number: str | None = None
+    invoice_date: str | None = None
+    due_date: str | None = None
+    vendor: str | None = None
+    customer: str | None = None
+    currency: str | None = None
+    subtotal: float | None = None
+    tax: float | None = None
+    total: float | None = None
+    line_items: list[AILine] | None = None
+
+
 class ClaudeExtractor:
-    """AIExtractor backed by the official `anthropic` SDK (structured output)."""
+    """AIExtractor backed by the `anthropic` SDK (structured output)."""
 
     def __init__(self, client: Any | None = None, model: str | None = None):
         self.model = model or os.environ.get("DOCFLOW_MODEL") or DEFAULT_MODEL
@@ -42,12 +66,15 @@ class ClaudeExtractor:
     @property
     def client(self) -> Any:
         if self._client is None:
-            import anthropic
+            try:
+                import anthropic
+            except ImportError as exc:
+                raise RuntimeError('the "anthropic" package is not installed '
+                                   '(pip install "docflow[ai]")') from exc
             self._client = anthropic.Anthropic()      # reads ANTHROPIC_API_KEY
         return self._client
 
     def extract(self, text: str, fields: list[str]) -> dict[str, Any]:
-        schema = _result_model()
         wanted = ", ".join(fields)
         resp = self.client.messages.parse(
             model=self.model,
@@ -55,16 +82,24 @@ class ClaudeExtractor:
             system=SYSTEM_PROMPT,
             messages=[{"role": "user", "content":
                        f"Extract these fields: {wanted}.\n\n<invoice_text>\n{text}\n</invoice_text>"}],
-            output_format=schema,
+            output_format=_result_model(),
         )
         parsed = getattr(resp, "parsed_output", None)
         if parsed is None:
             return {}
-        data = parsed.model_dump() if hasattr(parsed, "model_dump") else dict(parsed)
+        data = asdict(parsed) if is_dataclass(parsed) else parsed.model_dump()
         return {k: v for k, v in data.items() if k in fields and v is not None}
 
 
 def _result_model():
+    """The SDK's structured output needs pydantic; without it fall back to AIResult."""
+    try:
+        return _pydantic_result_model()
+    except ImportError:
+        return AIResult
+
+
+def _pydantic_result_model():
     from pydantic import BaseModel
 
     class AILine(BaseModel):
@@ -93,10 +128,6 @@ def get_ai_extractor(env: Mapping[str, str] | None = None) -> ClaudeExtractor | 
     env = os.environ if env is None else env
     if not env.get("ANTHROPIC_API_KEY"):
         return None
-    try:
-        import anthropic  # noqa: F401
-    except ImportError:
-        return None
     return ClaudeExtractor(model=env.get("DOCFLOW_MODEL") or DEFAULT_MODEL)
 
 
@@ -108,14 +139,12 @@ def _dec(v: Any) -> Decimal | None:
 
 
 def apply_ai_fallback(inv: Invoice, text: str, ai: AIExtractor) -> list[str]:
-    """Ask `ai` for the fields still missing; fill them in as medium confidence."""
     wanted = missing_fields(inv)
     if not wanted:
         return []
     try:
         result = ai.extract(text, wanted)
-    except Exception as exc:           # never let an API problem break the batch
-        from .models import Issue
+    except Exception as exc:       # an API problem must never break the batch
         inv.issues.append(Issue("ai_failed", f"AI fallback failed: {exc}", "warning"))
         return []
     filled: list[str] = []
